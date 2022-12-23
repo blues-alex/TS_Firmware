@@ -1,0 +1,8 @@
+#!/bin/sh
+
+FW="${1}"
+IP="${2:-10.11.1.1}"
+
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R $IP 2>>/dev/null
+sshpass -p"qwerty" scp  -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 -oHostKeyAlgorithms=+ssh-dss -oStrictHostKeyChecking=accept-new -oHostKeyAlgorithms=+ssh-dss 	$FW root@$IP:"/tmp/$FW"
+sshpass -p "qwerty" ssh -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 -oStrictHostKeyChecking=accept-new -oHostKeyAlgorithms=+ssh-dss root@$IP "sysupgrade -n /tmp/${FW}"
