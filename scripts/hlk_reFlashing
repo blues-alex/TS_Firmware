@@ -1,0 +1,20 @@
+#!/bin/sh
+
+FW="${1}"
+IP="${2:-10.11.1.1}"
+alias SSH='sshpass -p "096af40b01" ssh -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 -oStrictHostKeyChecking=accept-new -oHostKeyAlgorithms=+ssh-dss'
+alias SCP='sshpass -p"096af40b01" scp  -O -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oKexAlgorithms=+diffie-hellman-group1-sha1 -oHostKeyAlgorithms=+ssh-dss -oStrictHostKeyChecking=accept-new -oHostKeyAlgorithms=+ssh-dss'
+
+PREUPLOAD_SCRIPT='scripts/log_lib.sh'
+
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$IP" 2>>/dev/null
+
+SCP "$PREUPLOAD_SCRIPT" root@"${IP}:/usr/lib/" || exit 1
+
+echo "Copyng ${FW##*/} of ${FW%%/*} to ${IP}:/tmp"
+
+SCP "$FW" root@"$IP":"/tmp/${FW##*/}" 1>&2 && \
+    echo "Copyng success."
+echo "start firmware at ${IP} /tmp/${FW##*/}.."
+SSH root@"$IP" "sysupgrade -n /tmp/${FW##*/}" &
+

@@ -1,0 +1,71 @@
+#!/bin/sh
+
+alias SSH="sshpass -p'qwerty' ssh -oUserKnownHostsFile=/dev/null -oKexAlgorithms=+diffie-hellman-group1-sha1 -oHostKeyAlgorithms=+ssh-dss -oStrictHostKeyChecking=accept-new"
+alias SCP="sshpass -p'qwerty' scp -O -oUserKnownHostsFile=/dev/null -oKexAlgorithms=+diffie-hellman-group1-sha1 -oHostKeyAlgorithms=+ssh-dss -oStrictHostKeyChecking=accept-new"
+
+FW=$1
+IP=192.168.16.254
+COOKIES=/tmp/luci.cookies
+TMP=tmp/page.html
+KEY=$(cat $HOME/.ssh/id_rsa.pub)
+
+log() {
+    printf '\x1b[0;32m'
+    echo -n "[$(date +%s)]  "
+    printf '\x1b[0;37m'
+    echo -n "$*"
+    printf '\x1b[0;0m'
+    echo ""
+}
+
+[ ! -d tmp/ ] && mkdir tmp
+
+curl -s -c $COOKIES -X POST -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:103.0) Gecko/20100101 Firefox/103.0' \
+	-H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8' \
+	-H 'Accept-Language: en-US,en;q=0.5' \
+	-H 'Accept-Encoding: gzip, deflate' \
+	-H 'Content-Type: application/x-www-form-urlencoded' \
+	-H 'Origin: http://192.168.16.254' \
+	-H 'Connection: keep-alive' \
+	-H 'Referer: http://192.168.16.254/cgi-bin/luci' \
+	-H 'Upgrade-Insecure-Requests: 1' \
+	-o $TMP	\
+	--data-raw 'username=root&password=' \
+	"http://${IP}/cgi-bin/luci" >> /dev/null && \
+        log 'Cookies saved.'
+ 
+STOK=$(cat "$TMP"|grep -e ';stok='|head -n 1|cut -d = -f 3|cut -d / -f 1)
+log '"STOK" parsed.'
+# echo $IP $STOK $(cat $COOKIES)
+
+
+curl -s -b $COOKIES -c $COOKIES -F "cbi.submit=1" \
+     -F "cbid.system._pass.pw1=qwerty" \
+     -F "cbid.system._pass.pw2=qwerty" \
+     -F "cbid.dropbear.cfg024dd4.Interface=" \
+     -F "cbid.dropbear.cfg024dd4.Port=22" \
+     -F "cbi.cbe.dropbear.cfg024dd4.PasswordAuth=1" \
+     -F "cbid.dropbear.cfg024dd4.PasswordAuth=on" \
+     -F "cbi.cbe.dropbear.cfg024dd4.RootPasswordAuth=1" \
+     -F "cbid.dropbear.cfg024dd4.RootPasswordAuth=on" \
+     -F "cbi.cbe.dropbear.cfg024dd4.GatewayPorts=1" \
+     -F "cbid.dropbear._keys._data=ssh-rsa $KEY" \
+     -F "cbi.apply=Save & Apply" \
+     "http://$IP/cgi-bin/luci/;stok=$STOK/admin/system/admin" >> /dev/null && \
+     log 'Password changed.'
+
+
+rm $COOKIES $TMP
+log 'Cookies deleted.'
+
+# remove a host from the known list
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R $IP 2>>/dev/null && \
+    log 'known_hosts cleaning'
+
+# copyed FW to board
+SCP -O "$FW" root@$IP:"/tmp/$FW" && \
+    log 'Firmware delivered.'
+
+log 'run flashing'
+# run flashing
+SSH root@$IP "sysupgrade -n /tmp/${FW}"
